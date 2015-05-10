@@ -130,7 +130,7 @@ class Webserver:
     def handle_get_locks(self, request):
         locks = list(map(lambda x: x.to_dict(), manager.getLocks()))
 
-        return web.Response(content_type="application/json", body=json.dumps(locks).encode("UTF-8"))
+        return web.Response(content_type="application/json", body=json.dumps(locks, ensure_ascii=False).encode("UTF-8"))
 
 
     @asyncio.coroutine
@@ -138,7 +138,7 @@ class Webserver:
         try:
             response = manager.getLock(request.match_info.get('id')).to_dict()
 
-            return web.Response(content_type="application/json", body=json.dumps(response).encode("UTF-8"))
+            return web.Response(content_type="application/json", body=json.dumps(response, ensure_ascii=False).encode("UTF-8"))
         except KeyError:
             raise web.HTTPNotFound()
 
