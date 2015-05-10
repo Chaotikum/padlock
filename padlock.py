@@ -179,7 +179,7 @@ manager = LockManager(config["id"])
 for lock in config["locks"]:
     manager.addLock(Lock(lock["id"], lock["name"]))
 
-webserver = Webserver("::", 2500, manager)
+webserver = Webserver("localhost", 2500, manager)
 
 loop = asyncio.get_event_loop()
 asyncio.async(hmland(manager, config["host"], config["port"]))
