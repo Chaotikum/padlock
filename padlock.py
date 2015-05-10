@@ -163,11 +163,21 @@ class Webserver:
             raise web.HTTPNotFound()
 
     @asyncio.coroutine
+    def handle_door(self, request):
+        reader, writer = yield from asyncio.open_connection("fd20:bdda:5df0:0:bad8:12ff:fe66:fa6", 6004)
+
+        writer.write("open\n".encode("UTF-8"))
+        writer.close()
+
+        return web.Response(body="ACK".encode("UTF-8"))
+
+    @asyncio.coroutine
     def start(self, loop):
         app = web.Application(loop=loop)
         app.router.add_route('GET', '/locks', self.handle_get_locks)
         app.router.add_route('GET', '/lock/{id}', self.handle_get_lock)
         app.router.add_route('PUT', '/lock/{id}', self.handle_put_lock)
+        app.router.add_route('PUT', '/door', self.handle_door)
 
         srv = yield from loop.create_server(app.make_handler(), self.host, self.port)
         return srv
