@@ -127,7 +127,7 @@ class Webserver:
         self.manager = manager
 
     def log(self, request, msg):
-      print(request.headers["SSL_CLIENT_S_DN"], request.method, request.path, msg)
+      print(request.headers["SSL_CLIENT_S_DN"], request.headers["SSL_CLIENT_M_SERIAL"], request.method, request.path, msg)
 
     @asyncio.coroutine
     def handle_get_locks(self, request):
