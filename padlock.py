@@ -126,6 +126,9 @@ class Webserver:
         self.port = port
         self.manager = manager
 
+    def log(self, request, msg):
+      print(request.headers["SSL_CLIENT_S_DN"], request.method, request.path, msg)
+
     @asyncio.coroutine
     def handle_get_locks(self, request):
         locks = list(map(lambda x: x.to_dict(), manager.getLocks()))
@@ -152,8 +155,10 @@ class Webserver:
             r = r.strip()
 
             if r == "lock":
+                self.log(request, "%s locked" % lock)
                 lock.setLocked(manager.writer, manager.id, True)
             elif r == "unlock":
+                self.log(request, "%s unlocked" % lock)
                 lock.setLocked(manager.writer, manager.id, False)
             else:
                 raise web.HTTPBadRequest()
@@ -168,6 +173,8 @@ class Webserver:
 
         writer.write("open\n".encode("UTF-8"))
         writer.close()
+
+        self.log(request, "Türöffner betätigt")
 
         return web.Response(body="ACK".encode("UTF-8"))
 
