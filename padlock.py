@@ -97,8 +97,6 @@ class LockManager:
         lock.setInfo(int(m.group(4), 16))
         lock.setError(int(m.group(5), 16))
 
-        print(lock)
-
 
     def addLock(self, lock):
         self.locks[lock.id] = lock
