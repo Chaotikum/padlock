@@ -30,7 +30,7 @@ class Lock:
         uncertain = (info & 3) == 3
         battery_low = (info & 8) == 8
 
-        if battery_low == self.battery_low or uncertain == self.uncertain:
+        if battery_low == self.battery_low and uncertain == self.uncertain:
             return False
 
         self.uncertain = uncertain
