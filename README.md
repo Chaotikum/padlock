@@ -63,3 +63,12 @@ Trigger door opener.
 Example:
 
     curl --key my.key --cert my.crt https://$HOST/door -X PUT
+
+## GET /locks/stream
+
+Returns an event stream. Same format as /locks.
+
+## GET /lock/{id}/stream
+
+Returns an event stream. Same format as /lock/{id}.
+

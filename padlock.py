@@ -18,17 +18,33 @@ class Lock:
         self.error = None
 
     def setState(self, state):
-        if state == 1:
-            self.locked = False
-        else:
-            self.locked = True
+        locked = False if state == 1 else True
+        if locked == self.locked:
+            return False
+
+        self.locked = locked
+
+        return True
 
     def setInfo(self, info):
-        self.uncertain = (info & 3) == 3
-        self.battery_low = (info & 8) == 8
+        uncertain = (info & 3) == 3
+        battery_low = (info & 8) == 8
+
+        if battery_low == self.battery_low or uncertain == self.uncertain:
+            return False
+
+        self.uncertain = uncertain
+        self.battery_low = battery_low
+
+        return True
 
     def setError(self, error):
+        if error == self.error:
+            return False
+
         self.error = error
+
+        return True
 
     def getStatus(self, writer, id):
         r = "S6526C70F,00,00000000,01,6526C70F,01B001%s%s010E\r\n" % (id, self.id)
@@ -58,9 +74,13 @@ class Lock:
 
 class LockManager:
     def __init__(self, id):
+        self.observer = None
         self.writer = None
         self.id = id
         self.locks = {}
+
+    def setObserver(self, observer):
+        self.observer = observer
 
     def getLocks(self):
         return self.locks.values()
@@ -76,6 +96,7 @@ class LockManager:
             lock.getStatus(writer, self.id)
             yield from asyncio.sleep(1)
 
+    @asyncio.coroutine
     def handle(self, line):
         m = re.match("^E......,....,.*,.*,.*,......(......)(......)0601(..)(.)(.)", line)
 
@@ -93,9 +114,21 @@ class LockManager:
 
         lock = self.locks[src]
 
-        lock.setState(int(m.group(3), 16))
-        lock.setInfo(int(m.group(4), 16))
-        lock.setError(int(m.group(5), 16))
+        change = False
+
+        change = change or lock.setState(int(m.group(3), 16))
+        change = change or lock.setInfo(int(m.group(4), 16))
+        change = change or lock.setError(int(m.group(5), 16))
+
+        if change:
+            yield from self.announce(lock)
+
+    @asyncio.coroutine
+    def announce(self, lock):
+        print(lock)
+
+        if self.observer:
+            yield from self.observer.update(lock)
 
 
     def addLock(self, lock):
@@ -114,7 +147,7 @@ def hmland(manager, host, port):
             if not line:
                 break
 
-            manager.handle(line.decode("UTF-8").strip())
+            yield from manager.handle(line.decode("UTF-8").strip())
 
         yield from asyncio.sleep(2)
 
@@ -123,23 +156,77 @@ class Webserver:
         self.host = host
         self.port = port
         self.manager = manager
+        self.manager.setObserver(self)
+        self.queues = set()
 
     def log(self, request, msg):
-      print(request.headers["SSL_CLIENT_S_DN"], request.headers["SSL_CLIENT_M_SERIAL"], request.method, request.path, msg)
+        print(request.headers["SSL_CLIENT_S_DN"], request.headers["SSL_CLIENT_M_SERIAL"], request.method, request.path, msg)
+
+    @asyncio.coroutine
+    def update(self, lock):
+        queues = set(self.queues)
+
+        for queue in queues:
+            try:
+                queue.put_nowait(lock)
+            except asyncio.QueueFull:
+                self.queues.remove(queue)
+
+    def locksToJson(self):
+        locks = list(map(lambda x: x.to_dict(), manager.getLocks()))
+
+        return json.dumps(locks, ensure_ascii=False).encode("UTF-8")
+
+    def lockToJson(self, lock):
+        return json.dumps(lock.to_dict(), ensure_ascii=False).encode("UTF-8")
 
     @asyncio.coroutine
     def handle_get_locks(self, request):
-        locks = list(map(lambda x: x.to_dict(), manager.getLocks()))
-
-        return web.Response(content_type="application/json", body=json.dumps(locks, ensure_ascii=False).encode("UTF-8"))
-
+        return web.Response(content_type="application/json", body=self.locksToJson())
 
     @asyncio.coroutine
     def handle_get_lock(self, request):
         try:
-            response = manager.getLock(request.match_info.get('id')).to_dict()
+            lock = manager.getLock(request.match_info.get('id'))
 
-            return web.Response(content_type="application/json", body=json.dumps(response, ensure_ascii=False).encode("UTF-8"))
+            return web.Response(content_type="application/json", body=self.lockToJson(lock))
+        except KeyError:
+            raise web.HTTPNotFound()
+
+    @asyncio.coroutine
+    def handle_get_locks_stream(self, request):
+        stream = web.StreamResponse()
+        stream.content_type = 'text/event-stream'
+        stream.start(request)
+
+        queue = asyncio.Queue(maxsize=1)
+
+        self.queues.add(queue)
+
+        while True:
+            stream.write(b"data: " + self.locksToJson() + b"\n\n")
+            yield from queue.get()
+
+    @asyncio.coroutine
+    def handle_get_lock_stream(self, request):
+        try:
+            lock = manager.getLock(request.match_info.get('id'))
+            lock_id = lock.id
+
+            stream = web.StreamResponse()
+            stream.content_type = 'text/event-stream'
+            stream.start(request)
+
+            queue = asyncio.Queue(maxsize=1)
+
+            self.queues.add(queue)
+
+            while True:
+                if lock.id == lock_id:
+                    stream.write(b"data: " + self.lockToJson(lock) + b"\n\n")
+
+                lock = yield from queue.get()
+
         except KeyError:
             raise web.HTTPNotFound()
 
@@ -180,7 +267,9 @@ class Webserver:
     def start(self, loop):
         app = web.Application(loop=loop)
         app.router.add_route('GET', '/locks', self.handle_get_locks)
+        app.router.add_route('GET', '/locks/stream', self.handle_get_locks_stream)
         app.router.add_route('GET', '/lock/{id}', self.handle_get_lock)
+        app.router.add_route('GET', '/lock/{id}/stream', self.handle_get_lock_stream)
         app.router.add_route('PUT', '/lock/{id}', self.handle_put_lock)
         app.router.add_route('PUT', '/door', self.handle_door)
 
