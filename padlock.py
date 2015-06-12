@@ -160,7 +160,17 @@ class Webserver:
         self.queues = set()
 
     def log(self, request, msg):
-        print(request.headers["SSL_CLIENT_S_DN"], request.headers["SSL_CLIENT_M_SERIAL"], request.method, request.path, msg)
+        try:
+            dn = request.headers["SSL_CLIENT_S_DN"]
+        except KeyError:
+            dn = "(unknown, local request?)"
+
+        try:
+            sn = request.headers["SSL_CLIENT_M_SERIAL"]
+        except KeyError:
+            sn = "(unknown, local request?)"
+
+        print(dn, sn, request.method, request.path, msg)
 
     @asyncio.coroutine
     def update(self, lock):
