@@ -79,6 +79,8 @@ class LockManager:
         self.id = id
         self.locks = {}
 
+        asyncio.async(self.update_locks_task())
+
     def setObserver(self, observer):
         self.observer = observer
 
@@ -88,12 +90,22 @@ class LockManager:
     def getLock(self, id):
         return self.locks[id]
 
-    @asyncio.coroutine
     def setWriter(self, writer):
         self.writer = writer
 
+    @asyncio.coroutine
+    def update_locks_task(self):
+        while True:
+            yield from self.update_locks()
+            yield from asyncio.sleep(900)
+
+    @asyncio.coroutine
+    def update_locks(self):
+        if not self.writer:
+            return
+
         for _, lock in self.locks.items():
-            lock.getStatus(writer, self.id)
+            lock.getStatus(self.writer, self.id)
             yield from asyncio.sleep(1)
 
     @asyncio.coroutine
@@ -140,7 +152,9 @@ def hmland(manager, host, port):
     while True:
         reader, writer = yield from asyncio.open_connection(host, port)
 
-        asyncio.async(manager.setWriter(writer))
+        manager.setWriter(writer)
+
+        asyncio.async(manager.update_locks())
 
         while True:
             line = yield from reader.readline()
