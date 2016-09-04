@@ -4,7 +4,10 @@ import asyncio
 import yaml
 import re
 import json
+import socket
 from aiohttp import web
+from asyncio import events
+from asyncio.streams import StreamReader, StreamReaderProtocol, StreamWriter, _DEFAULT_LIMIT
 
 
 class Lock:
@@ -150,18 +153,31 @@ class LockManager:
 @asyncio.coroutine
 def hmland(manager, host, port):
     while True:
-        reader, writer = yield from asyncio.open_connection(host, port)
+        print("Connecting to hmland")
 
-        manager.setWriter(writer)
+        try:
+          loop = events.get_event_loop()
+          reader = StreamReader(limit=_DEFAULT_LIMIT, loop=loop)
+          protocol = StreamReaderProtocol(reader, loop=loop)
+          transport, _ = yield from loop.create_connection(lambda: protocol, host, port)
+          writer = StreamWriter(transport, protocol, reader, loop)
+          reader, writer = yield from asyncio.open_connection(host, port)
 
-        asyncio.async(manager.update_locks())
+          transport._sock.setsockopt(socket.SOL_SOCKET, socket.SO_KEEPALIVE, 1)
 
-        while True:
-            line = yield from reader.readline()
-            if not line:
-                break
+          manager.setWriter(writer)
 
-            yield from manager.handle(line.decode("UTF-8").strip())
+          asyncio.async(manager.update_locks())
+
+          while True:
+              line = yield from reader.readline()
+              if not line:
+                  break
+
+              yield from manager.handle(line.decode("UTF-8").strip())
+
+        except:
+          pass
 
         yield from asyncio.sleep(2)
 
