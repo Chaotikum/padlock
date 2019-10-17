@@ -157,20 +157,15 @@ def hmland(manager, host, port):
 
         try:
           loop = events.get_event_loop()
-          reader = StreamReader(limit=_DEFAULT_LIMIT, loop=loop)
-          protocol = StreamReaderProtocol(reader, loop=loop)
-          transport, _ = yield from loop.create_connection(lambda: protocol, host, port)
-          writer = StreamWriter(transport, protocol, reader, loop)
           reader, writer = yield from asyncio.open_connection(host, port)
-
-          transport._sock.setsockopt(socket.SOL_SOCKET, socket.SO_KEEPALIVE, 1)
 
           manager.setWriter(writer)
 
           asyncio.async(manager.update_locks())
-
+          print("Connected")
           while True:
               line = yield from reader.readline()
+
               if not line:
                   break
 
