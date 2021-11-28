@@ -288,6 +288,30 @@ class Webserver:
             raise web.HTTPNotFound()
 
     @asyncio.coroutine
+    def handle_open_lock(self, request):
+        try:
+            lock = manager.getLock(request.match_info.get('id'))
+
+            self.log(request, "%s unlocked" % lock)
+            lock.setLocked(manager.writer, manager.id, False)
+
+            return web.Response(body="ACK".encode("UTF-8"))
+        except KeyError:
+            raise web.HTTPNotFound()
+
+    @asyncio.coroutine
+    def handle_close_lock(self, request):
+        try:
+            lock = manager.getLock(request.match_info.get('id'))
+
+            self.log(request, "%s locked" % lock)
+            lock.setLocked(manager.writer, manager.id, True)
+
+            return web.Response(body="ACK".encode("UTF-8"))
+        except KeyError:
+            raise web.HTTPNotFound()
+            
+    @asyncio.coroutine
     def handle_door(self, request):
         reader, writer = yield from asyncio.open_connection("fd20:bdda:5df0:0:bad8:12ff:fe66:fa6", 6004)
 
@@ -306,6 +330,8 @@ class Webserver:
         app.router.add_route('GET', '/lock/{id}', self.handle_get_lock)
         app.router.add_route('GET', '/lock/{id}/stream', self.handle_get_lock_stream)
         app.router.add_route('PUT', '/lock/{id}', self.handle_put_lock)
+        app.router.add_route('PUT', '/lock/{id}/open', self.handle_open_lock)
+        app.router.add_route('PUT', '/lock/{id}/close', self.handle_close_lock)
         app.router.add_route('PUT', '/door', self.handle_door)
 
         srv = yield from loop.create_server(app.make_handler(), self.host, self.port)
