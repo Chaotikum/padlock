@@ -56,6 +56,22 @@ Example:
 
     curl --key my.key --cert my.crt https://$HOST/lock/123456 -X PUT --data unlock
 
+## PUT /lock/{id}/open
+
+Change state to unlock. Will return ACK or an HTTP error code.
+
+Example:
+
+    curl --key my.key --cert my.crt https://$HOST/lock/123456/open -X PUT 
+    
+## PUT /lock/{id}/close
+
+Change state to lock. Will return ACK or an HTTP error code.
+
+Example:
+
+    curl --key my.key --cert my.crt https://$HOST/lock/123456/close -X PUT 
+    
 ## PUT /door
 
 Trigger door opener.
