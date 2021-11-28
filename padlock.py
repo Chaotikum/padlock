@@ -195,7 +195,7 @@ class Webserver:
         except KeyError:
             sn = "(unknown, local request?)"
 
-        print(dn, sn, request.method, request.path, msg)
+        print(request.method, request.path, msg)
 
     @asyncio.coroutine
     def update(self, lock):
